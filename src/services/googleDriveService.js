@@ -213,17 +213,31 @@ export const getFileStream = async (fileId, { range } = {}) =>
         },
         {
           responseType: "stream",
-          headers: range ? { Range: range } : undefined,
+          // identity: a gzipped body would be inflated by fetch, and the
+          // bytes sent would no longer match the Content-Length we declare.
+          headers: {
+            "Accept-Encoding": "identity",
+            ...(range ? { Range: range } : {}),
+          },
         }
       );
+
+      // gaxios 7 (googleapis 150+) returns a fetch `Headers` object, where
+      // indexing by name is always undefined; older versions return a plain
+      // object. Without these two headers browsers refuse to play the 206s
+      // that <audio> asks for, and cannot work out a track's duration.
+      const header = (name) =>
+        typeof response.headers?.get === "function"
+          ? response.headers.get(name) ?? undefined
+          : response.headers?.[name];
 
       return {
         stream: response.data,
         status: response.status === 206 ? 206 : 200,
         headers: {
-          contentLength: response.headers["content-length"],
-          contentRange: response.headers["content-range"],
-          contentType: response.headers["content-type"],
+          contentLength: header("content-length"),
+          contentRange: header("content-range"),
+          contentType: header("content-type"),
         },
       };
     },

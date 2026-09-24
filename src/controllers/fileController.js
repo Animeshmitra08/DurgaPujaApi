@@ -11,6 +11,7 @@ import {
   shouldForceDownload,
   sniffMimeType,
 } from "../utils/fileType.js";
+import { parseRange } from "../utils/httpRange.js";
 import {
   buildStoredFileName,
   cleanText,
@@ -280,12 +281,24 @@ export const streamFile = asyncHandler(async (req, res) => {
   const file = await File.findOne({ _id: req.params.id, isActive: true }).lean();
   if (!file) throw ApiError.notFound("File not found");
 
-  const range = req.headers.range;
+  // Ranges are resolved against the size we stored at upload time, so the
+  // Content-Range/Content-Length we send never depend on Drive's echo.
+  const size = file.fileSize;
+  const range = parseRange(req.headers.range, size);
 
-  const { stream, status, headers } = await storage.streamFile(
-    file.driveFileId,
-    { range }
-  );
+  if (range?.unsatisfiable) {
+    res.setHeader("Accept-Ranges", "bytes");
+    res.setHeader("Content-Range", `bytes */${size}`);
+    return res.status(416).end();
+  }
+
+  const { stream, status } = await storage.streamFile(file.driveFileId, {
+    range: range ? `bytes=${range.start}-${range.end}` : undefined,
+  });
+
+  // Drive may ignore a Range and send the whole body; describe what we
+  // actually got rather than what we asked for.
+  const partial = range && status === 206;
 
   // Never let the browser sniff its way to a different type than we declare,
   // and never render SVG/HTML inline on this origin.
@@ -305,14 +318,14 @@ export const streamFile = asyncHandler(async (req, res) => {
   // Immutable content addressed by an id that never points at different bytes.
   res.setHeader("Cache-Control", "private, max-age=3600");
 
-  if (headers.contentLength) {
-    res.setHeader("Content-Length", headers.contentLength);
+  if (partial) {
+    res.setHeader("Content-Range", `bytes ${range.start}-${range.end}/${size}`);
+    res.setHeader("Content-Length", range.end - range.start + 1);
+    res.status(206);
+  } else {
+    res.setHeader("Content-Length", size);
+    res.status(200);
   }
-  if (status === 206 && headers.contentRange) {
-    res.setHeader("Content-Range", headers.contentRange);
-  }
-
-  res.status(status);
 
   // A viewer who seeks or navigates away aborts the request; without this the
   // Drive connection stays open and leaks a socket per abandoned stream.
