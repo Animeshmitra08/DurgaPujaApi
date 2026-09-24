@@ -1,0 +1,187 @@
+{
+  "info": {
+    "name": "Google Drive Storage API",
+    "description": "Generic file storage: Google Drive holds the bytes, MongoDB holds the metadata.\n\nSet the `baseUrl` variable, then run Upload first - it captures the returned _id into the `fileId` variable so every other request works without copy-pasting IDs.\n\nIf API_KEY is set on the server, put the same value in the `apiKey` variable; write requests send it as x-api-key.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000" },
+    { "key": "fileId", "value": "" },
+    { "key": "apiKey", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+      }
+    },
+    {
+      "name": "Upload file",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('201 Created', () => pm.response.to.have.status(201));",
+              "const body = pm.response.json();",
+              "pm.test('returns a record', () => pm.expect(body.data).to.have.property('_id'));",
+              "if (body.data && body.data._id) {",
+              "  pm.collectionVariables.set('fileId', body.data._id);",
+              "  console.log('fileId =', body.data._id);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "file", "type": "file", "src": [], "description": "Pick a file. REQUIRED." },
+            { "key": "title", "value": "My Audio", "type": "text" },
+            { "key": "description", "value": "Sample audio", "type": "text" },
+            { "key": "fileType", "value": "audio", "type": "text", "description": "Optional: audio|image|video|pdf|document|other. Derived from the MIME type when omitted." },
+            { "key": "folderName", "value": "", "type": "text", "disabled": true, "description": "Optional subfolder under the root, created on demand." }
+          ]
+        },
+        "url": { "raw": "{{baseUrl}}/api/files/upload", "host": ["{{baseUrl}}"], "path": ["api", "files", "upload"] }
+      }
+    },
+    {
+      "name": "List all files",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/files?page=1&limit=20",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "files"],
+          "query": [
+            { "key": "page", "value": "1" },
+            { "key": "limit", "value": "20" },
+            { "key": "sort", "value": "-createdAt", "disabled": true },
+            { "key": "search", "value": "", "disabled": true }
+          ]
+        }
+      }
+    },
+    {
+      "name": "List - filter by fileType",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/files?fileType=audio",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "files"],
+          "query": [{ "key": "fileType", "value": "audio", "description": "audio|image|video|pdf|document|other" }]
+        }
+      }
+    },
+    {
+      "name": "Get metadata",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/api/files/{{fileId}}", "host": ["{{baseUrl}}"], "path": ["api", "files", "{{fileId}}"] }
+      }
+    },
+    {
+      "name": "Stream file",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/files/{{fileId}}/stream",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "files", "{{fileId}}", "stream"],
+          "query": [{ "key": "download", "value": "true", "disabled": true, "description": "Force a download instead of inline rendering." }]
+        },
+        "description": "Returns the bytes. Add a Range header (see the next request) to get 206 Partial Content."
+      }
+    },
+    {
+      "name": "Stream file - partial (Range)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('206 Partial Content', () => pm.response.to.have.status(206));",
+              "pm.test('Content-Range present', () => pm.expect(pm.response.headers.get('Content-Range')).to.be.a('string'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Range", "value": "bytes=0-1023" }],
+        "url": { "raw": "{{baseUrl}}/api/files/{{fileId}}/stream", "host": ["{{baseUrl}}"], "path": ["api", "files", "{{fileId}}", "stream"] },
+        "description": "Proves Range passthrough. This is what makes <video>/<audio> seekable and what Safari requires before it will play media at all."
+      }
+    },
+    {
+      "name": "Update metadata",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "x-api-key", "value": "{{apiKey}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Updated title\",\n  \"description\": \"Updated description\",\n  \"fileType\": \"audio\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/api/files/{{fileId}}", "host": ["{{baseUrl}}"], "path": ["api", "files", "{{fileId}}"] }
+      }
+    },
+    {
+      "name": "Replace binary",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "file", "type": "file", "src": [], "description": "The replacement binary. REQUIRED." },
+            { "key": "title", "value": "", "type": "text", "disabled": true }
+          ]
+        },
+        "url": { "raw": "{{baseUrl}}/api/files/{{fileId}}/replace", "host": ["{{baseUrl}}"], "path": ["api", "files", "{{fileId}}", "replace"] },
+        "description": "Uploads the new file, swaps the record, then deletes the old Drive object. A failure at any step leaves the original intact."
+      }
+    },
+    {
+      "name": "Delete (soft)",
+      "request": {
+        "method": "DELETE",
+        "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+        "url": { "raw": "{{baseUrl}}/api/files/{{fileId}}", "host": ["{{baseUrl}}"], "path": ["api", "files", "{{fileId}}"] },
+        "description": "Sets isActive=false. The bytes stay in Drive, so this is recoverable, but the file disappears from every read path including /stream."
+      }
+    },
+    {
+      "name": "Delete (permanent)",
+      "request": {
+        "method": "DELETE",
+        "header": [{ "key": "x-api-key", "value": "{{apiKey}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/files/{{fileId}}?permanent=true",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "files", "{{fileId}}"],
+          "query": [{ "key": "permanent", "value": "true" }]
+        },
+        "description": "Removes the file from Drive, then drops the MongoDB record. Not recoverable."
+      }
+    },
+    {
+      "name": "Stats summary",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/api/files/stats/summary", "host": ["{{baseUrl}}"], "path": ["api", "files", "stats", "summary"] }
+      }
+    }
+  ]
+}

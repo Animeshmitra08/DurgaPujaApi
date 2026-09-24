@@ -1,0 +1,14 @@
+node_modules/
+uploads/
+.env
+.env.*
+!.env.example
+
+# Never commit service-account credentials
+*service-account*.json
+*credentials*.json
+gcp-key*.json
+
+npm-debug.log*
+.DS_Store
+.vscode/

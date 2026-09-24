@@ -1,0 +1,22 @@
+{
+  "name": "durgapujabackend",
+  "version": "1.0.0",
+  "description": "Generic Google Drive storage API - Drive holds the bytes, MongoDB holds the metadata",
+  "author": "Animesh Mitra",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "googleapis": "^181.0.0",
+    "mongoose": "^8.24.4",
+    "multer": "^2.0.2"
+  }
+}
